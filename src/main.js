@@ -656,7 +656,4 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-// (임시 디버그 훅 — 확인 후 제거)
-window.__debug = { player, keys, camera, modelPivot, characterHolder, enemies, tick: animate };
-
 animate();
