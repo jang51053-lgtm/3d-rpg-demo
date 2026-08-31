@@ -16,10 +16,34 @@
 </head>
 <body>
   <div id="app"></div>
+
   <div id="hud">
-    <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="hint">WASD: 이동 &nbsp;|&nbsp; 마우스: 시점 회전 &nbsp;|&nbsp; Space: 점프</div>
+    <div id="status">
+      <div class="status-name">휴리안</div>
+      <div class="bar hp"><div id="hp-fill" class="fill"></div></div>
+      <div class="bar mp"><div id="mp-fill" class="fill"></div></div>
+    </div>
+
+    <div id="objective">남은 적: <span id="enemy-count">0</span></div>
+
+    <div id="toast"></div>
+
+    <div id="skills">
+      <div class="skill" id="skill-dash">
+        <div class="skill-key">SPACE</div>
+        <div class="skill-icon">💨</div>
+        <div class="skill-cooldown" id="dash-cooldown"></div>
+      </div>
+      <div class="skill" id="skill-attack">
+        <div class="skill-key">X</div>
+        <div class="skill-icon">⚔️</div>
+        <div class="skill-cooldown" id="attack-cooldown"></div>
+      </div>
+    </div>
+
+    <div id="hint">WASD 이동 &nbsp;|&nbsp; Space 대시 &nbsp;|&nbsp; X 공격</div>
   </div>
+
   <script type="module" src="src/main.js"></script>
 </body>
 </html>
