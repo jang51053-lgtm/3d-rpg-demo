@@ -23,32 +23,142 @@ html, body {
 
 #hud {
   position: fixed;
-  top: 16px;
-  left: 16px;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  inset: 0;
   pointer-events: none;
   user-select: none;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 
-#hp-bar {
-  width: 220px;
-  height: 18px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 4px;
+/* ---------- status (HP / MP) ---------- */
+#status {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 240px;
+}
+
+.status-name {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.5px;
+}
+
+.bar {
+  width: 100%;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 3px;
   overflow: hidden;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
-#hp-fill {
+.bar .fill {
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #e74c3c, #c0392b);
-  transition: width 0.2s ease;
+  transition: width 0.15s ease;
 }
 
-#hint {
+.bar.hp .fill {
+  background: linear-gradient(90deg, #e74c3c, #c0392b);
+}
+
+.bar.mp .fill {
+  background: linear-gradient(90deg, #3498db, #2472a4);
+}
+
+/* ---------- objective ---------- */
+#objective {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 6px 12px;
   font-size: 13px;
-  opacity: 0.85;
+  font-weight: 600;
+}
+
+/* ---------- toast ---------- */
+#toast {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 209, 102, 0.6);
+  border-radius: 4px;
+  font-size: 13px;
+  color: #ffd166;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(4px);
+}
+
+/* ---------- skills ---------- */
+#skills {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+
+.skill {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  overflow: hidden;
+}
+
+.skill-key {
+  position: absolute;
+  top: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.5px;
+}
+
+.skill-icon {
+  margin-top: 4px;
+}
+
+.skill-cooldown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  background: rgba(0, 0, 0, 0.7);
+  transition: height 0.05s linear;
+}
+
+/* ---------- hint ---------- */
+#hint {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  opacity: 0.7;
 }
