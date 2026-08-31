@@ -5,12 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D RPG Demo</title>
   <link rel="stylesheet" href="src/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js"
+      }
+    }
+  </script>
 </head>
 <body>
   <div id="app"></div>
   <div id="hud">
     <div id="hp-bar"><div id="hp-fill"></div></div>
-    <div id="hint">WASD: 이동 &nbsp;|&nbsp; 마우스: 시점 &nbsp;|&nbsp; Space: 점프</div>
+    <div id="hint">WASD: 이동 &nbsp;|&nbsp; 마우스: 시점 회전 &nbsp;|&nbsp; Space: 점프</div>
   </div>
   <script type="module" src="src/main.js"></script>
 </body>
