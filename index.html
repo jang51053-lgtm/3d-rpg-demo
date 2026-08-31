@@ -17,6 +17,8 @@
 <body>
   <div id="app"></div>
 
+  <div id="damage-flash"></div>
+
   <div id="hud">
     <div id="status">
       <div class="status-name">휴리안</div>
@@ -29,10 +31,10 @@
     <div id="toast"></div>
 
     <div id="skills">
-      <div class="skill" id="skill-dash">
+      <div class="skill" id="skill-roll">
         <div class="skill-key">SPACE</div>
-        <div class="skill-icon">💨</div>
-        <div class="skill-cooldown" id="dash-cooldown"></div>
+        <div class="skill-icon">🤸</div>
+        <div class="skill-cooldown" id="roll-cooldown"></div>
       </div>
       <div class="skill" id="skill-attack">
         <div class="skill-key">X</div>
@@ -41,8 +43,10 @@
       </div>
     </div>
 
-    <div id="hint">WASD 이동 &nbsp;|&nbsp; Space 대시 &nbsp;|&nbsp; X 공격</div>
+    <div id="hint">WASD 이동 &nbsp;|&nbsp; Space 구르기 &nbsp;|&nbsp; X 공격</div>
   </div>
+
+  <div id="loading">캐릭터 불러오는 중…</div>
 
   <script type="module" src="src/main.js"></script>
 </body>
