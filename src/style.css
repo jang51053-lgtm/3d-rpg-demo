@@ -162,3 +162,35 @@ html, body {
   font-size: 12px;
   opacity: 0.7;
 }
+
+/* ---------- damage flash ---------- */
+#damage-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(200, 0, 0, 0) 42%, rgba(190, 0, 0, 0.6) 100%);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+#damage-flash.show {
+  opacity: 1;
+  transition: opacity 0.05s ease;
+}
+
+/* ---------- loading ---------- */
+#loading {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+#loading.hidden {
+  opacity: 0;
+}
