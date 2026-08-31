@@ -192,7 +192,6 @@ function showToast(text) {
 
 // ---------- Input ----------
 const keys = new Set();
-window.__debug = { player, keys, camera };
 window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'Space') {
@@ -376,5 +375,4 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-window.__debug.tick = animate;
 animate();
