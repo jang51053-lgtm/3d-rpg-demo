@@ -39,6 +39,16 @@ npm install
 npm run dev
 ```
 
+## 무료 3D 에셋 가져다 쓰기
+
+캐릭터 모델, 텍스처, 사운드 같은 무료 에셋을 받아서 바로 적용할 수 있도록 준비돼 있습니다.
+
+1. `assets/models`, `assets/textures`, `assets/sounds` 폴더에 받은 파일을 넣습니다. (추천 사이트와 자세한 설명은 [`assets/README.md`](assets/README.md) 참고)
+2. `src/loaders.js`에 있는 `loadModel()` / `loadTexture()` / `loadSound()` 함수로 불러옵니다.
+3. `src/main.js`에 사용 예시가 주석으로 이미 들어있으니, 주석을 풀고 파일 경로만 맞추면 됩니다.
+
+`.glb` 같은 3D 모델 파일도 그냥 저장소에 커밋하면 되고, GitHub Pages/로컬 서버 양쪽에서 동일하게 동작합니다.
+
 ## 현재 포함된 것
 
 - 3인칭 카메라(마우스 드래그로 시점 회전)
@@ -54,7 +64,7 @@ npm run dev
 
 ## 로드맵 (TODO)
 
-- [ ] 캐릭터 모델(GLTF) 로딩 및 애니메이션
+- [ ] 무료 에셋으로 캐릭터 모델(GLTF) 교체 및 애니메이션 적용
 - [ ] 충돌 처리 및 점프/중력
 - [ ] 전투 시스템 (공격, 스킬, 데미지)
 - [ ] 인벤토리 / 아이템 시스템
