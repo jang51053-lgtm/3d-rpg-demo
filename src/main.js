@@ -376,4 +376,5 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+window.__debug.tick = animate;
 animate();
