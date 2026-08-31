@@ -14,8 +14,8 @@ const CHARACTER_HEIGHT = 1.8;
 
 // ---------- Scene / Camera / Renderer ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0c0d12);
-scene.fog = new THREE.Fog(0x0c0d12, 18, 48);
+scene.background = new THREE.Color(0x14161f);
+scene.fog = new THREE.Fog(0x14161f, 24, 55);
 
 const camera = new THREE.PerspectiveCamera(
   45,
@@ -25,7 +25,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 
 // 고정 각도(쿼터뷰) 오프셋 — 회전 없이 플레이어를 따라만 감
-const CAMERA_OFFSET = new THREE.Vector3(0, 13, 9);
+const CAMERA_OFFSET = new THREE.Vector3(0, 11.5, 8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -41,9 +41,9 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- Lighting ----------
-scene.add(new THREE.HemisphereLight(0x3a4a66, 0x0a0a0a, 0.7));
+scene.add(new THREE.HemisphereLight(0x8899bb, 0x2a2a30, 1.7));
 
-const moonLight = new THREE.DirectionalLight(0x8fb3ff, 0.8);
+const moonLight = new THREE.DirectionalLight(0xbcd0ff, 1.9);
 moonLight.position.set(-10, 20, -10);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.set(2048, 2048);
@@ -53,8 +53,13 @@ moonLight.shadow.camera.top = 25;
 moonLight.shadow.camera.bottom = -25;
 scene.add(moonLight);
 
+// 카메라 쪽 보조광 — 벽/캐릭터 앞면이 새까맣게 되지 않도록
+const fillLight = new THREE.DirectionalLight(0xaebedd, 0.55);
+fillLight.position.set(4, 10, 14);
+scene.add(fillLight);
+
 // 플레이어를 따라다니는 횃불
-const torchLight = new THREE.PointLight(0xffb066, 1.6, 14, 2);
+const torchLight = new THREE.PointLight(0xffb066, 3.2, 20, 2);
 torchLight.position.set(0, 3, 0);
 scene.add(torchLight);
 
@@ -89,7 +94,7 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ---------- Walls / pillars ----------
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x3d3830, roughness: 1 });
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x5c5446, roughness: 1 });
 
 function addBox(x, y, z, w, h, d) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
@@ -211,6 +216,7 @@ loadModel(CHARACTER_MODEL_URL)
     const scale = CHARACTER_HEIGHT / height;
     model.scale.setScalar(scale);
     model.position.y = -box.min.y * scale;
+    model.rotation.y = Math.PI; // 이 모델은 -Z를 보고 있어서 정면(+Z)으로 돌려줌
 
     characterHolder.remove(playerRig);
     playerRig = null;
@@ -267,6 +273,7 @@ function spawnEnemy(x, z) {
     walkPhase: Math.random() * Math.PI * 2,
     hitFlash: 0,
     stagger: 0,
+    punchT: -1,
   });
 }
 
@@ -369,8 +376,11 @@ const attackCooldownEl = document.getElementById('attack-cooldown');
 const ENEMY_SPEED = 2.5;
 const ENEMY_SIGHT = 16;
 const ENEMY_ATTACK_RANGE = 1.7;
-const ENEMY_DAMAGE = 8;
-const ENEMY_ATTACK_CD = 1.3;
+const ENEMY_DAMAGE = 7;
+const ENEMY_ATTACK_CD = 1.5;
+
+// 타격감용 카메라 흔들림
+let camShake = 0;
 
 const START_POS = new THREE.Vector3(0, 0, 6);
 
@@ -423,6 +433,7 @@ function damageEnemy(enemy, amount, knockDir) {
   enemy.hp -= amount;
   enemy.hitFlash = 0.12;
   enemy.stagger = 0.25;
+  camShake = Math.max(camShake, 0.22);
 
   // 넉백
   if (knockDir) {
@@ -443,6 +454,7 @@ function damagePlayer(amount) {
   if (rollT >= 0) return; // 구르는 동안 무적
   setHp(hp - amount);
   flashDamage();
+  camShake = Math.max(camShake, 0.35);
   if (hp <= 0) {
     player.position.copy(START_POS);
     setHp(MAX_HP);
@@ -496,7 +508,7 @@ function animate() {
     player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
     player.rotation.y = Math.atan2(rollDir.x, rollDir.z);
 
-    modelPivot.rotation.x = -Math.PI * 2 * eased;
+    modelPivot.rotation.x = Math.PI * 2 * eased; // 앞으로 한 바퀴
     const tuck = 1 - Math.sin(p * Math.PI) * 0.18; // 몸을 살짝 웅크리는 느낌
     modelPivot.scale.setScalar(tuck);
 
@@ -593,12 +605,22 @@ function animate() {
         enemy.attackCd -= dt;
         if (dist <= ENEMY_ATTACK_RANGE && enemy.attackCd <= 0) {
           enemy.attackCd = ENEMY_ATTACK_CD;
+          enemy.punchT = 0;
           damagePlayer(ENEMY_DAMAGE);
         }
       }
     } else {
       enemy.walkPhase += dt * 2;
       animateLimbs(g, enemy.walkPhase, 0.1);
+    }
+
+    // 때리는 모션 (걷기 모션 위에 덧입힘)
+    if (enemy.punchT >= 0) {
+      enemy.punchT += dt / 0.3;
+      const s = Math.sin(Math.min(enemy.punchT, 1) * Math.PI);
+      g.userData.limbs.armR.rotation.x = -2.1 * s;
+      g.userData.limbs.armL.rotation.x = -0.5 * s;
+      if (enemy.punchT >= 1) enemy.punchT = -1;
     }
   });
 
@@ -621,6 +643,14 @@ function animate() {
 
   camTarget.copy(player.position).add(CAMERA_OFFSET);
   camera.position.lerp(camTarget, 1 - Math.exp(-9 * dt));
+
+  if (camShake > 0) {
+    camShake = Math.max(0, camShake - dt * 1.6);
+    camera.position.x += (Math.random() - 0.5) * camShake;
+    camera.position.y += (Math.random() - 0.5) * camShake;
+    camera.position.z += (Math.random() - 0.5) * camShake;
+  }
+
   camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
 
   renderer.render(scene, camera);
