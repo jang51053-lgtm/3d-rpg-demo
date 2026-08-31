@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadModel, loadTexture, loadSound } from './loaders.js';
 
 // ---------- Scene / Camera / Renderer ----------
 const scene = new THREE.Scene();
@@ -75,6 +76,37 @@ bodyMesh.castShadow = true;
 player.add(bodyMesh);
 player.position.set(0, 0, 5);
 scene.add(player);
+
+// ---------------------------------------------------------------
+// 무료 에셋 적용하기 (assets/ 폴더에 파일을 넣은 뒤 아래 주석을 해제하세요)
+//
+// 1) 캐릭터 모델(.glb)로 기본 캡슐 교체:
+//
+// loadModel('assets/models/character.glb')
+//   .then((gltf) => {
+//     player.remove(bodyMesh); // 기본 캡슐 제거
+//     gltf.scene.scale.set(1, 1, 1);
+//     gltf.scene.traverse((obj) => {
+//       if (obj.isMesh) obj.castShadow = true;
+//     });
+//     player.add(gltf.scene);
+//   })
+//   .catch((err) => console.warn('모델 로드 실패, 기본 캡슐 사용:', err));
+//
+// 2) 바닥에 텍스처 입히기:
+//
+// loadTexture('assets/textures/ground.jpg').then((tex) => {
+//   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+//   tex.repeat.set(20, 20);
+//   groundMat.map = tex;
+//   groundMat.needsUpdate = true;
+// });
+//
+// 3) 효과음 재생하기:
+//
+// const hitSfx = loadSound('assets/sounds/hit.mp3', { volume: 0.6 });
+// hitSfx.play();
+// ---------------------------------------------------------------
 
 // A simple placeholder "enemy"
 const enemyGeo = new THREE.ConeGeometry(0.6, 1.6, 8);
