@@ -851,9 +851,12 @@ function animate() {
     player.position.addScaledVector(moveDir, SPEED * moveScale * dt);
     player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
     player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
-    const target = Math.atan2(moveDir.x, moveDir.z);
-    const turnRate = state === 'attack' ? 5 : 14;
-    player.rotation.y = lerpAngle(player.rotation.y, target, 1 - Math.exp(-turnRate * dt));
+    // 방어 중에는 시선을 고정 (게걸음 + 4방향 구르기가 가능해짐)
+    if (state !== 'block') {
+      const target = Math.atan2(moveDir.x, moveDir.z);
+      const turnRate = state === 'attack' ? 5 : 14;
+      player.rotation.y = lerpAngle(player.rotation.y, target, 1 - Math.exp(-turnRate * dt));
+    }
   }
 
   // ----- 공격 판정 타이밍 -----
@@ -1034,15 +1037,5 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-
-// (임시 디버그 훅 — 확인 후 제거)
-window.__debug = {
-  player, keys, camera, characterHolder, enemies, scene,
-  get actions() { return actions; },
-  get state() { return state; },
-  get current() { return currentAction ? currentAction.getClip().name : null; },
-  setBlock(v) { blockHeld = v; },
-  tick: animate,
-};
 
 animate();

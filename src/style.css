@@ -106,7 +106,7 @@ html, body {
 /* ---------- skills ---------- */
 #skills {
   position: absolute;
-  bottom: 30px;
+  bottom: 38px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -180,11 +180,24 @@ html, body {
 /* ---------- hint ---------- */
 #hint {
   position: absolute;
-  bottom: 6px;
+  bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: 11px;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+/* 좁은 화면에서는 버튼에 키가 적혀 있으므로 안내문 숨김 */
+@media (max-width: 620px) {
+  #hint {
+    display: none;
+  }
+  .skill {
+    width: 56px;
+    height: 56px;
+    font-size: 22px;
+  }
 }
 
 /* ---------- damage flash ---------- */
