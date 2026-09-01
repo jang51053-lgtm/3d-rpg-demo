@@ -31,19 +31,32 @@
     <div id="toast"></div>
 
     <div id="skills">
-      <div class="skill" id="skill-roll" title="구르기">
+      <div class="skill" id="skill-roll" title="구르기 (Space)">
         <div class="skill-key">SPACE</div>
         <div class="skill-icon">🤸</div>
         <div class="skill-cooldown" id="roll-cooldown"></div>
       </div>
-      <div class="skill" id="skill-attack" title="공격">
-        <div class="skill-key">CLICK</div>
+      <div class="skill" id="skill-charge" title="돌진 (Shift)">
+        <div class="skill-key">SHIFT</div>
+        <div class="skill-icon">⚡</div>
+        <div class="skill-cooldown" id="charge-cooldown"></div>
+      </div>
+      <div class="skill" id="skill-block" title="방어 (우클릭 / Q 길게)">
+        <div class="skill-key">우클릭</div>
+        <div class="skill-icon">🛡️</div>
+        <div class="skill-cooldown" id="block-cooldown"></div>
+      </div>
+      <div class="skill" id="skill-attack" title="공격 (좌클릭)">
+        <div class="skill-key">좌클릭</div>
         <div class="skill-icon">🗡️</div>
         <div class="skill-cooldown" id="attack-cooldown"></div>
       </div>
     </div>
 
-    <div id="hint">WASD 이동 &nbsp;|&nbsp; Space 구르기 &nbsp;|&nbsp; 마우스 좌클릭(또는 아래 버튼) 공격</div>
+    <div id="hint">
+      WASD 이동 &nbsp;·&nbsp; 좌클릭 공격 &nbsp;·&nbsp; 우클릭(홀드) 방어 &nbsp;·&nbsp; Space 구르기 &nbsp;·&nbsp; Shift 돌진
+      &nbsp;— 터치는 아래 버튼
+    </div>
   </div>
 
   <div id="loading">캐릭터 불러오는 중…</div>
