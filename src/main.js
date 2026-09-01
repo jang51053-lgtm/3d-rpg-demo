@@ -65,7 +65,7 @@ scene.background = new THREE.Color(0x14161f);
 scene.fog = new THREE.Fog(0x14161f, 45, 120);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-const CAMERA_OFFSET = new THREE.Vector3(0, 11.5, 8);
+const CAMERA_OFFSET = new THREE.Vector3(0, 16, 11.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -136,9 +136,9 @@ scene.add(ground);
 // ---------- 근정전 ----------
 // 0=석재(월대·계단·기단)  1=목재(기둥·벽·단청)  2=지붕
 const palaceMats = [
-  new THREE.MeshStandardMaterial({ color: 0x9d968a, roughness: 0.95 }),
-  new THREE.MeshStandardMaterial({ color: 0x8e4034, roughness: 0.8 }),
-  new THREE.MeshStandardMaterial({ color: 0x4b505c, roughness: 0.85 }),
+  new THREE.MeshStandardMaterial({ color: 0x8d8578, roughness: 0.96 }), // 화강암
+  new THREE.MeshStandardMaterial({ color: 0x9c3b2c, roughness: 0.75 }), // 단청 기둥
+  new THREE.MeshStandardMaterial({ color: 0x3f4550, roughness: 0.8 }),  // 기와
 ];
 const roofMat = palaceMats[2];
 const woodMat = palaceMats[1];
