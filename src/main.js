@@ -61,10 +61,10 @@ function equipGear(root) {
 
 // ---------- Scene / Camera / Renderer ----------
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x14161f);
-scene.fog = new THREE.Fog(0x14161f, 45, 120);
+scene.background = new THREE.Color(0x1c2231);
+scene.fog = new THREE.Fog(0x1c2231, 45, 120);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 1000);
 const CAMERA_OFFSET = new THREE.Vector3(0, 16, 11.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -81,9 +81,9 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- Lighting ----------
-scene.add(new THREE.HemisphereLight(0x8899bb, 0x2a2a30, 1.7));
+scene.add(new THREE.HemisphereLight(0x9fb0d0, 0x3a3630, 2.2));
 
-const moonLight = new THREE.DirectionalLight(0xbcd0ff, 1.9);
+const moonLight = new THREE.DirectionalLight(0xc8d8ff, 2.4);
 moonLight.position.set(-10, 20, -10);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.set(2048, 2048);
@@ -1095,17 +1095,5 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-
-// (임시 디버그 훅 — 확인 후 제거)
-window.__debug = {
-  player, keys, camera, characterHolder, enemies, scene,
-  get palace() { return palace; },
-  get state() { return state; },
-  get current() { return currentAction ? currentAction.getClip().name : null; },
-  terrainHeight,
-  canStand,
-  setBlock(v) { blockHeld = v; },
-  tick: animate,
-};
 
 animate();
