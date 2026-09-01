@@ -4,27 +4,31 @@ import { loadModel, loadTexture, loadSound } from './loaders.js';
 
 // =================================================================
 // 던전 크롤러 프로토타입
-// 쿼터뷰 고정 카메라 · WASD 이동 · Space 구르기 · 좌클릭(또는 화면 버튼) 공격
+// 이동 / 공격 / 구르기(4방향) / 돌진 / 방어 — 모두 모델 내장 애니메이션 사용
 // =================================================================
 
 // 캐릭터 모델: KayKit Adventurers - Knight (CC0)
-// 검(1H_Sword)과 검 공격/회피 애니메이션이 모델에 포함되어 있습니다.
-// 다른 모델을 쓰려면 이 주소만 바꾸면 됩니다.
 const CHARACTER_MODEL_URL =
   'https://cdn.jsdelivr.net/gh/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0@main/addons/kaykit_character_pack_adventures/Characters/gltf/Knight.glb';
 const CHARACTER_HEIGHT = 1.8;
 
-// 사용할 애니메이션 이름
 const ANIM = {
   idle: 'Idle',
   run: 'Running_A',
   attack: '1H_Melee_Attack_Slice_Diagonal',
   attackAlt: '1H_Melee_Attack_Chop',
-  dodge: 'Dodge_Forward',
+  charge: '1H_Melee_Attack_Stab',
+  dodgeF: 'Dodge_Forward',
+  dodgeB: 'Dodge_Backward',
+  dodgeL: 'Dodge_Left',
+  dodgeR: 'Dodge_Right',
+  block: 'Blocking',
+  blockHit: 'Block_Hit',
+  hit: 'Hit_A',
   death: 'Death_A',
 };
 
-// 손에 들려있는 장비 중 검만 남기고 나머지는 숨김
+// 손에 들 장비 (모델에 포함된 무기/방패를 보이기/숨기기로 교체)
 const EQUIP_NODES = [
   '1H_Sword',
   '1H_Sword_Offhand',
@@ -34,9 +38,9 @@ const EQUIP_NODES = [
   'Round_Shield',
   'Spike_Shield',
 ];
-const EQUIP_VISIBLE = new Set(['1H_Sword']);
+const EQUIP_VISIBLE = new Set(['1H_Sword', 'Round_Shield']);
 
-function equipSwordOnly(root) {
+function equipGear(root) {
   EQUIP_NODES.forEach((name) => {
     const obj = root.getObjectByName(name);
     if (obj) obj.visible = EQUIP_VISIBLE.has(name);
@@ -48,12 +52,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14161f);
 scene.fog = new THREE.Fog(0x14161f, 24, 55);
 
-const camera = new THREE.PerspectiveCamera(
-  45,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 const CAMERA_OFFSET = new THREE.Vector3(0, 11.5, 8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -120,7 +119,7 @@ ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// ---------- Walls / pillars ----------
+// ---------- Walls ----------
 const wallMat = new THREE.MeshStandardMaterial({ color: 0x5c5446, roughness: 1 });
 
 function addBox(x, y, z, w, h, d) {
@@ -137,13 +136,12 @@ addBox(0, WALL_H / 2, -ARENA_SIZE - 1, ARENA_SIZE * 2 + 4, WALL_H, 2);
 addBox(0, WALL_H / 2, ARENA_SIZE + 1, ARENA_SIZE * 2 + 4, WALL_H, 2);
 addBox(-ARENA_SIZE - 1, WALL_H / 2, 0, 2, WALL_H, ARENA_SIZE * 2 + 4);
 addBox(ARENA_SIZE + 1, WALL_H / 2, 0, 2, WALL_H, ARENA_SIZE * 2 + 4);
-
 addBox(6, 1.5, -6, 2, 3, 2);
 addBox(-8, 1.5, 4, 2, 3, 2);
 addBox(3, 1, 8, 4, 2, 2);
 addBox(-4, 2, -9, 2, 4, 2);
 
-// ---------- 모델 로딩 실패 시 쓰는 간이 캐릭터 ----------
+// ---------- 모델 로딩 실패 시 대체 캐릭터 ----------
 function createBlockyHumanoid({ main = 0x3d6fb5, skin = 0xe0ac69, dark = 0x2c3e50 } = {}) {
   const group = new THREE.Group();
   const materials = [];
@@ -155,7 +153,6 @@ function createBlockyHumanoid({ main = 0x3d6fb5, skin = 0xe0ac69, dark = 0x2c3e5
     mesh.castShadow = true;
     group.add(mesh);
     materials.push(mat);
-    return mesh;
   }
 
   function limb(w, h, d, color, x, y, z) {
@@ -201,14 +198,32 @@ scene.add(player);
 const characterHolder = new THREE.Group();
 player.add(characterHolder);
 
-let playerRig = createBlockyHumanoid(); // 로딩 전 임시
+let playerRig = createBlockyHumanoid();
 characterHolder.add(playerRig);
 
-// 애니메이션 상태
 let mixer = null;
 const actions = {};
 let currentAction = null;
-let animState = 'locomotion'; // 'locomotion' | 'attack' | 'roll'
+
+// ---------- 상태 머신 ----------
+// locomotion | attack | roll | charge | block | hit | dead
+let state = 'locomotion';
+let stateTimer = 0;
+
+const MOVE_SCALE = {
+  locomotion: 1,
+  block: 0.35,
+  attack: 0.18,
+  hit: 0.3,
+  roll: 0,
+  charge: 0,
+  dead: 0,
+};
+
+function setState(name, duration = 0) {
+  state = name;
+  stateTimer = duration;
+}
 
 function playClip(name, { fade = 0.18, once = false, fitDuration = null } = {}) {
   const action = actions[name];
@@ -216,13 +231,8 @@ function playClip(name, { fade = 0.18, once = false, fitDuration = null } = {}) 
   if (!once && currentAction === action) return action;
 
   action.reset();
-  if (once) {
-    action.setLoop(THREE.LoopOnce, 1);
-    action.clampWhenFinished = true;
-  } else {
-    action.setLoop(THREE.LoopRepeat, Infinity);
-    action.clampWhenFinished = false;
-  }
+  action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+  action.clampWhenFinished = once;
   action.timeScale = fitDuration ? action.getClip().duration / fitDuration : 1;
   action.fadeIn(fade).play();
   if (currentAction && currentAction !== action) currentAction.fadeOut(fade);
@@ -231,7 +241,7 @@ function playClip(name, { fade = 0.18, once = false, fitDuration = null } = {}) 
 }
 
 const loadingEl = document.getElementById('loading');
-let knightTemplate = null; // 적 복제용 원본
+let knightTemplate = null;
 let knightClips = null;
 
 loadModel(CHARACTER_MODEL_URL)
@@ -246,10 +256,8 @@ loadModel(CHARACTER_MODEL_URL)
         o.frustumCulled = false;
       }
     });
-    equipSwordOnly(model);
+    equipGear(model);
 
-    // 키 정규화 (장비 제외한 몸 기준으로 계산)
-    const body = model.getObjectByName('Knight_Body') || model;
     const box = new THREE.Box3().setFromObject(model);
     const height = box.max.y - box.min.y || 1;
     const scale = CHARACTER_HEIGHT / height;
@@ -265,14 +273,6 @@ loadModel(CHARACTER_MODEL_URL)
       actions[clip.name] = mixer.clipAction(clip);
     });
     playClip(ANIM.idle, { fade: 0 });
-
-    // 애니메이션이 끝나면 다시 이동/대기 상태로
-    mixer.addEventListener('finished', () => {
-      if (animState === 'attack') {
-        animState = 'locomotion';
-        currentAction = null;
-      }
-    });
 
     spawnEnemies(true);
     loadingEl.classList.add('hidden');
@@ -299,6 +299,39 @@ slash.position.y = 0.9;
 slash.visible = false;
 player.add(slash);
 
+// 돌진 궤적 (앞으로 뻗는 빛줄기)
+const trailGeo = new THREE.PlaneGeometry(1.1, 5);
+trailGeo.rotateX(-Math.PI / 2);
+trailGeo.translate(0, 0, 2.2);
+const trailMat = new THREE.MeshBasicMaterial({
+  color: 0xaad4ff,
+  transparent: true,
+  opacity: 0,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+const trail = new THREE.Mesh(trailGeo, trailMat);
+trail.position.y = 0.5;
+trail.visible = false;
+player.add(trail);
+
+// 방어 성공 시 번쩍이는 링
+const guardGeo = new THREE.RingGeometry(0.75, 1.05, 28);
+guardGeo.rotateX(-Math.PI / 2);
+const guardMat = new THREE.MeshBasicMaterial({
+  color: 0x9fd8ff,
+  transparent: true,
+  opacity: 0,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+const guardFx = new THREE.Mesh(guardGeo, guardMat);
+guardFx.position.y = 1.0;
+guardFx.visible = false;
+player.add(guardFx);
+
 // ---------- Enemies ----------
 const enemies = [];
 const ENEMY_SPOTS = [
@@ -312,16 +345,15 @@ function makeKnightClone() {
   const obj = skeletonClone(knightTemplate);
   obj.scale.copy(knightTemplate.scale);
   obj.position.y = knightTemplate.position.y;
-  equipSwordOnly(obj);
+  equipGear(obj);
 
-  // 적은 붉게 물들여 구분
   const materials = [];
   obj.traverse((o) => {
     if (o.isMesh) {
       o.castShadow = true;
       o.frustumCulled = false;
       o.material = o.material.clone();
-      o.material.color.multiplyScalar(1).setRGB(
+      o.material.color.setRGB(
         Math.min(1, o.material.color.r * 1.35 + 0.25),
         o.material.color.g * 0.5,
         o.material.color.b * 0.5
@@ -330,14 +362,13 @@ function makeKnightClone() {
     }
   });
 
-  const mixer = new THREE.AnimationMixer(obj);
+  const m = new THREE.AnimationMixer(obj);
   const acts = {};
+  const wanted = [ANIM.idle, ANIM.run, ANIM.attackAlt, ANIM.death, ANIM.hit];
   knightClips.forEach((clip) => {
-    if ([ANIM.idle, ANIM.run, ANIM.attackAlt, ANIM.death].includes(clip.name)) {
-      acts[clip.name] = mixer.clipAction(clip);
-    }
+    if (wanted.includes(clip.name)) acts[clip.name] = m.clipAction(clip);
   });
-  return { obj, mixer, actions: acts, materials };
+  return { obj, mixer: m, actions: acts, materials };
 }
 
 function spawnEnemies(useModel) {
@@ -365,13 +396,12 @@ function spawnEnemies(useModel) {
       materials: visual.materials,
       rig: visual.rig || null,
       hp: 40,
-      maxHp: 40,
       alive: true,
       attackCd: 0.8 + Math.random() * 0.8,
       walkPhase: Math.random() * Math.PI * 2,
       hitFlash: 0,
       stagger: 0,
-      punchT: -1,
+      busy: -1, // 공격/피격 모션 진행 중
       dieT: undefined,
     });
   });
@@ -457,25 +487,41 @@ function setMp(value) {
 setHp(hp);
 setMp(mp);
 
-// ---------- State ----------
+// ---------- 상태 변수 ----------
 const keys = new Set();
 const moveDir = new THREE.Vector3();
 const lastFacing = new THREE.Vector3(0, 0, 1);
 const SPEED = 6.2;
 
-const ROLL_DURATION = 0.55;
-const ROLL_DISTANCE = 5.2;
+// 구르기
+const ROLL_DURATION = 0.5;
+const ROLL_DISTANCE = 5.0;
 const ROLL_COST = 25;
-const ROLL_COOLDOWN = 0.85;
+const ROLL_COOLDOWN = 0.8;
 let rollT = -1;
 let rollCooldownLeft = 0;
 const rollDir = new THREE.Vector3();
 const rollStart = new THREE.Vector3();
 const rollCooldownEl = document.getElementById('roll-cooldown');
 
+// 돌진
+const CHARGE_DURATION = 0.42;
+const CHARGE_DISTANCE = 7.5;
+const CHARGE_COST = 30;
+const CHARGE_COOLDOWN = 1.8;
+const CHARGE_DAMAGE = 20;
+const CHARGE_HIT_RADIUS = 1.7;
+let chargeT = -1;
+let chargeCooldownLeft = 0;
+const chargeDir = new THREE.Vector3();
+const chargeStart = new THREE.Vector3();
+let chargeHitSet = new Set();
+const chargeCooldownEl = document.getElementById('charge-cooldown');
+
+// 공격
 const ATTACK_COOLDOWN = 0.6;
 const ATTACK_DURATION = 0.55;
-const ATTACK_HIT_DELAY = 0.22; // 검이 실제로 닿는 타이밍
+const ATTACK_HIT_DELAY = 0.22;
 const ATTACK_RANGE = 2.8;
 const ATTACK_DAMAGE = 14;
 let attackCooldownLeft = 0;
@@ -483,10 +529,20 @@ let pendingHit = -1;
 let slashT = -1;
 const attackCooldownEl = document.getElementById('attack-cooldown');
 
+// 방어
+const BLOCK_REDUCTION = 0.85; // 막으면 데미지 85% 감소
+let blockHeld = false;
+let guardT = -1;
+const blockBtnEl = document.getElementById('skill-block');
+
+// 이펙트
+let trailT = -1;
+
+// 적
 const ENEMY_SPEED = 2.5;
 const ENEMY_SIGHT = 16;
 const ENEMY_ATTACK_RANGE = 1.9;
-const ENEMY_DAMAGE = 7;
+const ENEMY_DAMAGE = 9;
 const ENEMY_ATTACK_CD = 1.5;
 
 let camShake = 0;
@@ -499,56 +555,110 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (!e.repeat) tryRoll();
   }
-  if (e.code === 'KeyX' && !e.repeat) tryAttack(); // 키보드 대체키
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) tryCharge();
+  if (e.code === 'KeyQ' && !e.repeat) blockHeld = true;
+  if (e.code === 'KeyX' && !e.repeat) tryAttack();
 });
-window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+  if (e.code === 'KeyQ') blockHeld = false;
+});
+window.addEventListener('blur', () => {
+  keys.clear();
+  blockHeld = false;
+});
 
-// 마우스 좌클릭 / 터치로 공격
+// 마우스: 좌클릭 공격 / 우클릭 방어(홀드)
 renderer.domElement.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0) return;
   e.preventDefault();
-  tryAttack();
+  if (e.button === 0) tryAttack();
+  if (e.button === 2) blockHeld = true;
+});
+window.addEventListener('pointerup', (e) => {
+  if (e.button === 2) blockHeld = false;
 });
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// 화면 버튼 (터치패드 / 모바일)
-function bindButton(id, handler) {
+// 화면 버튼
+function bindButton(id, onDown, onUp) {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     e.stopPropagation();
     el.classList.add('pressed');
-    handler();
+    if (onDown) onDown();
   });
-  const release = () => el.classList.remove('pressed');
+  const release = () => {
+    el.classList.remove('pressed');
+    if (onUp) onUp();
+  };
   el.addEventListener('pointerup', release);
   el.addEventListener('pointerleave', release);
   el.addEventListener('pointercancel', release);
 }
 bindButton('skill-attack', () => tryAttack());
 bindButton('skill-roll', () => tryRoll());
+bindButton('skill-charge', () => tryCharge());
+bindButton('skill-block', () => { blockHeld = true; }, () => { blockHeld = false; });
 
-// ---------- Actions ----------
+// ---------- 액션 ----------
+function canAct() {
+  return state === 'locomotion' || state === 'block';
+}
+
 function tryRoll() {
-  if (rollT >= 0 || rollCooldownLeft > 0 || mp < ROLL_COST) return;
+  if (!canAct() || rollCooldownLeft > 0 || mp < ROLL_COST) return;
   rollDir.copy(moveDir.lengthSq() > 0 ? moveDir : lastFacing).normalize();
   rollStart.copy(player.position);
   rollT = 0;
   setMp(mp - ROLL_COST);
   rollCooldownLeft = ROLL_COOLDOWN;
-  lastFacing.copy(rollDir);
 
-  animState = 'roll';
-  playClip(ANIM.dodge, { once: true, fade: 0.08, fitDuration: ROLL_DURATION });
+  // 바라보는 방향 기준으로 4방향 구르기 중 하나 선택
+  const facing = new THREE.Vector3(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y));
+  const dot = facing.dot(rollDir);
+  const cross = facing.z * rollDir.x - facing.x * rollDir.z;
+  let clip = ANIM.dodgeF;
+  if (dot > 0.5) {
+    clip = ANIM.dodgeF;
+    player.rotation.y = Math.atan2(rollDir.x, rollDir.z); // 앞구르기는 진행방향을 봄
+    lastFacing.copy(rollDir);
+  } else if (dot < -0.5) {
+    clip = ANIM.dodgeB;
+  } else {
+    clip = cross > 0 ? ANIM.dodgeL : ANIM.dodgeR;
+  }
+
+  setState('roll', ROLL_DURATION);
+  playClip(clip, { once: true, fade: 0.06, fitDuration: ROLL_DURATION });
+}
+
+function tryCharge() {
+  if (!canAct() || chargeCooldownLeft > 0 || mp < CHARGE_COST) return;
+  chargeDir.copy(moveDir.lengthSq() > 0 ? moveDir : lastFacing).normalize();
+  chargeStart.copy(player.position);
+  chargeT = 0;
+  chargeHitSet = new Set();
+  setMp(mp - CHARGE_COST);
+  chargeCooldownLeft = CHARGE_COOLDOWN;
+  lastFacing.copy(chargeDir);
+  player.rotation.y = Math.atan2(chargeDir.x, chargeDir.z);
+
+  trailT = 0;
+  trail.visible = true;
+  trailMat.opacity = 0.75;
+
+  setState('charge', CHARGE_DURATION);
+  playClip(ANIM.charge, { once: true, fade: 0.05, fitDuration: CHARGE_DURATION + 0.15 });
+  camShake = Math.max(camShake, 0.2);
 }
 
 function tryAttack() {
-  if (attackCooldownLeft > 0 || rollT >= 0) return;
+  if (state !== 'locomotion' || attackCooldownLeft > 0) return;
   attackCooldownLeft = ATTACK_COOLDOWN;
   pendingHit = ATTACK_HIT_DELAY;
-
-  animState = 'attack';
+  setState('attack', ATTACK_DURATION);
   playClip(ANIM.attack, { once: true, fade: 0.06, fitDuration: ATTACK_DURATION });
 }
 
@@ -568,20 +678,20 @@ function resolveAttackHit() {
     if (dist > ATTACK_RANGE) return;
     toEnemy.normalize();
     if (facing.dot(toEnemy) < 0.25) return;
-    damageEnemy(enemy, ATTACK_DAMAGE, toEnemy);
+    damageEnemy(enemy, ATTACK_DAMAGE, toEnemy, 0.8);
     hitAny = true;
   });
   if (!hitAny) camShake = Math.max(camShake, 0.05);
 }
 
-function damageEnemy(enemy, amount, knockDir) {
+function damageEnemy(enemy, amount, knockDir, knockDist = 0.8) {
   enemy.hp -= amount;
   enemy.hitFlash = 0.12;
-  enemy.stagger = 0.28;
+  enemy.stagger = 0.3;
   camShake = Math.max(camShake, 0.28);
 
   if (knockDir) {
-    enemy.group.position.addScaledVector(knockDir, 0.8);
+    enemy.group.position.addScaledVector(knockDir, knockDist);
     enemy.group.position.x = THREE.MathUtils.clamp(enemy.group.position.x, -BOUND, BOUND);
     enemy.group.position.z = THREE.MathUtils.clamp(enemy.group.position.z, -BOUND, BOUND);
   }
@@ -592,20 +702,58 @@ function damageEnemy(enemy, amount, knockDir) {
     if (enemy.actions) enemyPlay(enemy, ANIM.death, { once: true, fade: 0.1 });
     const left = updateEnemyCount();
     if (left === 0) showToast('구역 정리 완료!');
+  } else if (enemy.actions) {
+    enemy.busy = 0.45;
+    enemyPlay(enemy, ANIM.hit, { once: true, fade: 0.06, fitDuration: 0.45 });
   }
 }
 
-function damagePlayer(amount) {
-  if (rollT >= 0) return; // 구르는 동안 무적
-  setHp(hp - amount);
-  flashDamage();
-  camShake = Math.max(camShake, 0.35);
-  if (hp <= 0) {
-    player.position.copy(START_POS);
-    setHp(MAX_HP);
-    setMp(MAX_MP);
-    showToast('쓰러졌다… 입구에서 다시 시작');
+function damagePlayer(amount, fromPos) {
+  if (state === 'roll' || state === 'dead') return; // 구르는 동안 무적
+
+  // 앞에서 오는 공격만 막을 수 있음
+  let blocked = false;
+  if (state === 'block' && fromPos) {
+    const facing = new THREE.Vector3(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y));
+    const toAttacker = fromPos.clone().sub(player.position);
+    toAttacker.y = 0;
+    if (toAttacker.lengthSq() > 0 && facing.dot(toAttacker.normalize()) > 0.15) blocked = true;
   }
+
+  if (blocked) {
+    setHp(hp - amount * (1 - BLOCK_REDUCTION));
+    playClip(ANIM.blockHit, { once: true, fade: 0.05, fitDuration: 0.4 });
+    guardT = 0;
+    guardFx.visible = true;
+    guardMat.opacity = 0.9;
+    guardFx.scale.setScalar(0.8);
+    camShake = Math.max(camShake, 0.12);
+  } else {
+    setHp(hp - amount);
+    flashDamage();
+    camShake = Math.max(camShake, 0.35);
+    if (hp > 0 && state === 'locomotion') {
+      setState('hit', 0.35);
+      playClip(ANIM.hit, { once: true, fade: 0.05, fitDuration: 0.35 });
+    }
+  }
+
+  if (hp <= 0) {
+    setState('dead', 1.6);
+    playClip(ANIM.death, { once: true, fade: 0.1, fitDuration: 0.9 });
+    showToast('쓰러졌다…');
+  }
+}
+
+function respawn() {
+  player.position.copy(START_POS);
+  player.rotation.y = 0;
+  setHp(MAX_HP);
+  setMp(MAX_MP);
+  setState('locomotion');
+  currentAction = null;
+  playClip(ANIM.idle, { fade: 0.1 });
+  showToast('입구에서 다시 시작');
 }
 
 // ---------- Helpers ----------
@@ -638,42 +786,77 @@ function animate() {
   if (keys.has('KeyA')) moveDir.x -= 1;
   if (keys.has('KeyD')) moveDir.x += 1;
   if (moveDir.lengthSq() > 0) moveDir.normalize();
-
   const isMoving = moveDir.lengthSq() > 0;
-  const rolling = rollT >= 0;
+
+  // ----- 상태 타이머 -----
+  if (state !== 'locomotion' && state !== 'block') {
+    stateTimer -= dt;
+    if (stateTimer <= 0) {
+      if (state === 'dead') {
+        respawn();
+      } else {
+        setState('locomotion');
+        currentAction = null;
+      }
+    }
+  }
+
+  // ----- 방어 상태 진입/해제 -----
+  if (blockHeld && state === 'locomotion') setState('block');
+  if (!blockHeld && state === 'block') {
+    setState('locomotion');
+    currentAction = null;
+  }
 
   // ----- 구르기 -----
-  if (rolling) {
+  if (rollT >= 0) {
     rollT += dt / ROLL_DURATION;
     const p = Math.min(rollT, 1);
-    const eased = easeOut(p);
-
-    player.position.copy(rollStart).addScaledVector(rollDir, ROLL_DISTANCE * eased);
+    player.position.copy(rollStart).addScaledVector(rollDir, ROLL_DISTANCE * easeOut(p));
     player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
     player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
-    player.rotation.y = Math.atan2(rollDir.x, rollDir.z);
-
-    if (!mixer && playerRig) {
-      // 모델이 없을 때만 직접 굴려줌
-      characterHolder.rotation.x = Math.PI * 2 * eased;
-    }
-
+    if (!mixer && playerRig) characterHolder.rotation.x = Math.PI * 2 * easeOut(p);
     if (rollT >= 1) {
       rollT = -1;
       characterHolder.rotation.x = 0;
-      animState = 'locomotion';
-      currentAction = null;
     }
-  } else if (isMoving) {
+  }
+
+  // ----- 돌진 -----
+  if (chargeT >= 0) {
+    chargeT += dt / CHARGE_DURATION;
+    const p = Math.min(chargeT, 1);
+    player.position.copy(chargeStart).addScaledVector(chargeDir, CHARGE_DISTANCE * easeOut(p));
+    player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
+    player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
+
+    // 지나가면서 부딪히는 적에게 데미지 (적당 1회)
+    enemies.forEach((enemy, idx) => {
+      if (!enemy.alive || chargeHitSet.has(idx)) return;
+      const d = enemy.group.position.clone().sub(player.position);
+      d.y = 0;
+      if (d.length() <= CHARGE_HIT_RADIUS) {
+        chargeHitSet.add(idx);
+        damageEnemy(enemy, CHARGE_DAMAGE, d.normalize(), 1.6);
+      }
+    });
+
+    if (chargeT >= 1) chargeT = -1;
+  }
+
+  // ----- 일반 이동 -----
+  const moveScale = MOVE_SCALE[state] ?? 1;
+  if (isMoving && moveScale > 0) {
     lastFacing.copy(moveDir);
-    player.position.addScaledVector(moveDir, SPEED * dt);
+    player.position.addScaledVector(moveDir, SPEED * moveScale * dt);
     player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
     player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
     const target = Math.atan2(moveDir.x, moveDir.z);
-    player.rotation.y = lerpAngle(player.rotation.y, target, 1 - Math.exp(-14 * dt));
+    const turnRate = state === 'attack' ? 5 : 14;
+    player.rotation.y = lerpAngle(player.rotation.y, target, 1 - Math.exp(-turnRate * dt));
   }
 
-  // ----- 공격 타이밍 -----
+  // ----- 공격 판정 타이밍 -----
   if (pendingHit >= 0) {
     pendingHit -= dt;
     if (pendingHit <= 0) {
@@ -684,8 +867,10 @@ function animate() {
 
   // ----- 캐릭터 애니메이션 -----
   if (mixer) {
-    if (animState === 'locomotion') {
+    if (state === 'locomotion') {
       playClip(isMoving ? ANIM.run : ANIM.idle);
+    } else if (state === 'block') {
+      playClip(ANIM.block, { fade: 0.12 });
     }
     mixer.update(dt);
   } else if (playerRig) {
@@ -693,7 +878,7 @@ function animate() {
     animateLimbs(playerRig, walkPhase, isMoving ? 0.75 : 0.12);
   }
 
-  // ----- 베기 이펙트 -----
+  // ----- 이펙트 -----
   if (slashT >= 0) {
     slashT += dt / 0.22;
     const p = Math.min(slashT, 1);
@@ -703,16 +888,40 @@ function animate() {
     if (slashT >= 1) {
       slashT = -1;
       slash.visible = false;
-      slashMat.opacity = 0;
+    }
+  }
+
+  if (trailT >= 0) {
+    trailT += dt / 0.35;
+    const p = Math.min(trailT, 1);
+    trailMat.opacity = 0.75 * (1 - p);
+    trail.scale.set(1 - p * 0.3, 1, 1);
+    if (trailT >= 1) {
+      trailT = -1;
+      trail.visible = false;
+    }
+  }
+
+  if (guardT >= 0) {
+    guardT += dt / 0.3;
+    const p = Math.min(guardT, 1);
+    guardMat.opacity = 0.9 * (1 - p);
+    guardFx.scale.setScalar(0.8 + p * 0.7);
+    if (guardT >= 1) {
+      guardT = -1;
+      guardFx.visible = false;
     }
   }
 
   // ----- 쿨다운 / 마나 -----
   if (rollCooldownLeft > 0) rollCooldownLeft = Math.max(0, rollCooldownLeft - dt);
+  if (chargeCooldownLeft > 0) chargeCooldownLeft = Math.max(0, chargeCooldownLeft - dt);
   if (attackCooldownLeft > 0) attackCooldownLeft = Math.max(0, attackCooldownLeft - dt);
-  setMp(mp + MP_REGEN * dt);
+  if (state !== 'block') setMp(mp + MP_REGEN * dt); // 방어 중에는 마나 회복 정지
   rollCooldownEl.style.height = `${(rollCooldownLeft / ROLL_COOLDOWN) * 100}%`;
+  chargeCooldownEl.style.height = `${(chargeCooldownLeft / CHARGE_COOLDOWN) * 100}%`;
   attackCooldownEl.style.height = `${(attackCooldownLeft / ATTACK_COOLDOWN) * 100}%`;
+  blockBtnEl.classList.toggle('active', state === 'block');
 
   // ----- 적 -----
   enemies.forEach((enemy) => {
@@ -724,10 +933,7 @@ function animate() {
         enemy.dieT += dt / (enemy.mixer ? 1.6 : 0.4);
         const p = Math.min(enemy.dieT, 1);
         if (enemy.mixer) {
-          if (p > 0.7) {
-            const fade = (p - 0.7) / 0.3;
-            g.scale.setScalar(1 - fade);
-          }
+          if (p > 0.7) g.scale.setScalar(1 - (p - 0.7) / 0.3);
         } else {
           g.scale.setScalar(1 - p);
           g.rotation.z = p * 1.4;
@@ -746,57 +952,53 @@ function animate() {
       });
     }
     if (enemy.stagger > 0) enemy.stagger -= dt;
+    if (enemy.busy >= 0) {
+      enemy.busy -= dt;
+      if (enemy.busy < 0) enemy.current = null;
+    }
 
     const toPlayer = player.position.clone().sub(g.position);
     toPlayer.y = 0;
     const dist = toPlayer.length();
+    const busy = enemy.busy >= 0;
 
     if (dist < ENEMY_SIGHT && dist > 0.01) {
       toPlayer.normalize();
       const targetRot = Math.atan2(toPlayer.x, toPlayer.z);
       g.rotation.y = lerpAngle(g.rotation.y, targetRot, 1 - Math.exp(-8 * dt));
 
-      if (dist > ENEMY_ATTACK_RANGE && enemy.stagger <= 0) {
+      if (dist > ENEMY_ATTACK_RANGE && enemy.stagger <= 0 && !busy) {
         g.position.addScaledVector(toPlayer, ENEMY_SPEED * dt);
-        if (enemy.mixer) {
-          if (enemy.punchT < 0) enemyPlay(enemy, ANIM.run);
-        } else {
+        if (enemy.mixer) enemyPlay(enemy, ANIM.run);
+        else {
           enemy.walkPhase += dt * 9;
           animateLimbs(enemy.rig, enemy.walkPhase, 0.6);
         }
       } else {
-        if (enemy.mixer) {
-          if (enemy.punchT < 0) enemyPlay(enemy, ANIM.idle);
-        } else {
-          enemy.walkPhase += dt * 2.5;
-          animateLimbs(enemy.rig, enemy.walkPhase, 0.12);
+        if (!busy) {
+          if (enemy.mixer) enemyPlay(enemy, ANIM.idle);
+          else {
+            enemy.walkPhase += dt * 2.5;
+            animateLimbs(enemy.rig, enemy.walkPhase, 0.12);
+          }
         }
         enemy.attackCd -= dt;
-        if (dist <= ENEMY_ATTACK_RANGE && enemy.attackCd <= 0) {
+        if (dist <= ENEMY_ATTACK_RANGE && enemy.attackCd <= 0 && !busy) {
           enemy.attackCd = ENEMY_ATTACK_CD;
-          enemy.punchT = 0;
+          enemy.busy = 0.7;
           if (enemy.mixer) enemyPlay(enemy, ANIM.attackAlt, { once: true, fade: 0.08, fitDuration: 0.7 });
-          damagePlayer(ENEMY_DAMAGE);
+          else {
+            enemy.walkPhase = 0;
+            animateLimbs(enemy.rig, Math.PI / 2, 1.6);
+          }
+          damagePlayer(ENEMY_DAMAGE, g.position);
         }
       }
-    } else if (!enemy.mixer) {
-      enemy.walkPhase += dt * 2;
-      animateLimbs(enemy.rig, enemy.walkPhase, 0.1);
-    } else if (enemy.punchT < 0) {
-      enemyPlay(enemy, ANIM.idle);
-    }
-
-    // 때리는 모션 진행 (간이 캐릭터용 + 상태 해제)
-    if (enemy.punchT >= 0) {
-      enemy.punchT += dt / (enemy.mixer ? 0.7 : 0.3);
-      if (!enemy.mixer && enemy.rig) {
-        const s = Math.sin(Math.min(enemy.punchT, 1) * Math.PI);
-        enemy.rig.userData.limbs.armR.rotation.x = -2.1 * s;
-        enemy.rig.userData.limbs.armL.rotation.x = -0.5 * s;
-      }
-      if (enemy.punchT >= 1) {
-        enemy.punchT = -1;
-        enemy.current = null;
+    } else if (!busy) {
+      if (enemy.mixer) enemyPlay(enemy, ANIM.idle);
+      else {
+        enemy.walkPhase += dt * 2;
+        animateLimbs(enemy.rig, enemy.walkPhase, 0.1);
       }
     }
   });
@@ -832,5 +1034,15 @@ function animate() {
 
   renderer.render(scene, camera);
 }
+
+// (임시 디버그 훅 — 확인 후 제거)
+window.__debug = {
+  player, keys, camera, characterHolder, enemies, scene,
+  get actions() { return actions; },
+  get state() { return state; },
+  get current() { return currentAction ? currentAction.getClip().name : null; },
+  setBlock(v) { blockHeld = v; },
+  tick: animate,
+};
 
 animate();
