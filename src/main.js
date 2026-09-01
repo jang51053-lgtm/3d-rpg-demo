@@ -1,11 +1,23 @@
 import * as THREE from 'three';
 import { clone as skeletonClone } from 'three/addons/utils/SkeletonUtils.js';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { loadModel, loadTexture, loadSound } from './loaders.js';
+import {
+  MAP_SCALE,
+  loadTerrain,
+  terrainHeight,
+  moveOnTerrain,
+  canStand,
+} from './terrain.js';
 
 // =================================================================
-// 던전 크롤러 프로토타입
+// 경복궁 근정전 — 액션 RPG 프로토타입
 // 이동 / 공격 / 구르기(4방향) / 돌진 / 방어 — 모두 모델 내장 애니메이션 사용
 // =================================================================
+
+// 맵: 근정전 STL + 미리 계산된 높이맵/장애물 마스크
+const MAP_STL_URL = 'assets/models/geunjeongjeon.stl';
+const MAP_JSON_URL = 'assets/models/geunjeongjeon.map.json';
 
 // 캐릭터 모델: KayKit Adventurers - Knight (CC0)
 const CHARACTER_MODEL_URL =
@@ -50,7 +62,7 @@ function equipGear(root) {
 // ---------- Scene / Camera / Renderer ----------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x14161f);
-scene.fog = new THREE.Fog(0x14161f, 24, 55);
+scene.fog = new THREE.Fog(0x14161f, 45, 120);
 
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 const CAMERA_OFFSET = new THREE.Vector3(0, 11.5, 8);
@@ -75,10 +87,11 @@ const moonLight = new THREE.DirectionalLight(0xbcd0ff, 1.9);
 moonLight.position.set(-10, 20, -10);
 moonLight.castShadow = true;
 moonLight.shadow.mapSize.set(2048, 2048);
-moonLight.shadow.camera.left = -25;
-moonLight.shadow.camera.right = 25;
-moonLight.shadow.camera.top = 25;
-moonLight.shadow.camera.bottom = -25;
+moonLight.shadow.camera.left = -45;
+moonLight.shadow.camera.right = 45;
+moonLight.shadow.camera.top = 45;
+moonLight.shadow.camera.bottom = -45;
+moonLight.shadow.camera.far = 90;
 scene.add(moonLight);
 
 const fillLight = new THREE.DirectionalLight(0xaebedd, 0.55);
@@ -105,41 +118,62 @@ function createCheckerTexture(colorA, colorB, size = 256) {
   return tex;
 }
 
-const ARENA_SIZE = 20;
-const BOUND = ARENA_SIZE - 1;
+const BOUND = 30; // 궁역 밖으로 나가지 않도록
 
-const floorTex = createCheckerTexture('#2b2b30', '#242428');
-floorTex.repeat.set(ARENA_SIZE, ARENA_SIZE);
+// 마당 바닥 (박석 느낌)
+const floorTex = createCheckerTexture('#57534b', '#4e4a43');
+floorTex.repeat.set(70, 70);
 
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(ARENA_SIZE * 2 + 4, ARENA_SIZE * 2 + 4),
-  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.95 })
+  new THREE.PlaneGeometry(260, 260),
+  new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.98 })
 );
 ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.02;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// ---------- Walls ----------
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x5c5446, roughness: 1 });
+// ---------- 근정전 ----------
+// 0=석재(월대·계단·기단)  1=목재(기둥·벽·단청)  2=지붕
+const palaceMats = [
+  new THREE.MeshStandardMaterial({ color: 0x9d968a, roughness: 0.95 }),
+  new THREE.MeshStandardMaterial({ color: 0x8e4034, roughness: 0.8 }),
+  new THREE.MeshStandardMaterial({ color: 0x4b505c, roughness: 0.85 }),
+];
+const roofMat = palaceMats[2];
+const woodMat = palaceMats[1];
+let palace = null;
 
-function addBox(x, y, z, w, h, d) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-  mesh.position.set(x, y, z);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-  return mesh;
-}
+// 지붕이 시야를 가릴 때 투명하게 처리할 범위 (월드 XZ)
+const HALL_RECT = { x0: -17.5, x1: 17.5, z0: -14, z1: 13 };
 
-const WALL_H = 4;
-addBox(0, WALL_H / 2, -ARENA_SIZE - 1, ARENA_SIZE * 2 + 4, WALL_H, 2);
-addBox(0, WALL_H / 2, ARENA_SIZE + 1, ARENA_SIZE * 2 + 4, WALL_H, 2);
-addBox(-ARENA_SIZE - 1, WALL_H / 2, 0, 2, WALL_H, ARENA_SIZE * 2 + 4);
-addBox(ARENA_SIZE + 1, WALL_H / 2, 0, 2, WALL_H, ARENA_SIZE * 2 + 4);
-addBox(6, 1.5, -6, 2, 3, 2);
-addBox(-8, 1.5, 4, 2, 3, 2);
-addBox(3, 1, 8, 4, 2, 2);
-addBox(-4, 2, -9, 2, 4, 2);
+Promise.all([
+  new Promise((resolve, reject) => new STLLoader().load(MAP_STL_URL, resolve, undefined, reject)),
+  fetch(MAP_JSON_URL).then((r) => r.json()),
+])
+  .then(([geometry, mapJson]) => {
+    loadTerrain(mapJson);
+
+    mapJson.groups.forEach((g) => geometry.addGroup(g.start, g.count, g.material));
+    palace = new THREE.Mesh(geometry, palaceMats);
+    palace.rotation.x = -Math.PI / 2; // Z-up → Y-up
+    palace.scale.setScalar(MAP_SCALE);
+    palace.castShadow = true;
+    palace.receiveShadow = true;
+    scene.add(palace);
+
+    // 지형이 준비됐으니 캐릭터/적/아이템을 바닥에 앉힘
+    player.position.y = terrainHeight(player.position.x, player.position.z);
+    enemies.forEach((e) => {
+      e.group.position.y = terrainHeight(e.group.position.x, e.group.position.z);
+    });
+    items.forEach((it) => {
+      it.baseY = terrainHeight(it.mesh.position.x, it.mesh.position.z) + 0.7;
+      it.mesh.position.y = it.baseY;
+    });
+    showToast('근정전에 도착했다');
+  })
+  .catch((err) => console.warn('맵을 불러오지 못했습니다:', err));
 
 // ---------- 모델 로딩 실패 시 대체 캐릭터 ----------
 function createBlockyHumanoid({ main = 0x3d6fb5, skin = 0xe0ac69, dark = 0x2c3e50 } = {}) {
@@ -192,7 +226,8 @@ function animateLimbs(rig, phase, amount) {
 
 // ---------- Player ----------
 const player = new THREE.Group();
-player.position.set(0, 0, 6);
+player.position.set(0, 0, 21); // 마당, 계단 앞
+player.rotation.y = Math.PI;   // 근정전을 바라봄
 scene.add(player);
 
 const characterHolder = new THREE.Group();
@@ -335,10 +370,12 @@ player.add(guardFx);
 // ---------- Enemies ----------
 const enemies = [];
 const ENEMY_SPOTS = [
-  [7, -7],
-  [-9, 3],
-  [2, 9],
-  [-3, -10],
+  [-7, 10],   // 기단 앞 좌
+  [7, 10],    // 기단 앞 우
+  [-11, -2],  // 기단 좌측
+  [11, -2],   // 기단 우측
+  [-5, -11],  // 기단 뒤 좌
+  [5, -11],   // 기단 뒤 우
 ];
 
 function makeKnightClone() {
@@ -441,14 +478,14 @@ const items = [];
 
 function spawnItem(x, z, label, effect) {
   const mesh = new THREE.Mesh(itemGeo, itemMat);
-  mesh.position.set(x, 0.6, z);
+  mesh.position.set(x, 0.7, z);
   scene.add(mesh);
-  items.push({ mesh, label, effect, collected: false });
+  items.push({ mesh, label, effect, collected: false, baseY: 0.7 });
 }
 
-spawnItem(4, 2, '체력 물약', 'hp');
-spawnItem(-5, -4, '마나 구슬', 'mp');
-spawnItem(0, -12, '금화 주머니', null);
+spawnItem(-13, 8, '체력 물약', 'hp');
+spawnItem(0, -2, '마나 구슬', 'mp'); // 전각 내부
+spawnItem(13, -10, '금화 주머니', null);
 
 // ---------- HUD ----------
 const toastEl = document.getElementById('toast');
@@ -540,13 +577,13 @@ let trailT = -1;
 
 // 적
 const ENEMY_SPEED = 2.5;
-const ENEMY_SIGHT = 16;
+const ENEMY_SIGHT = 26;
 const ENEMY_ATTACK_RANGE = 1.9;
 const ENEMY_DAMAGE = 9;
 const ENEMY_ATTACK_CD = 1.5;
 
 let camShake = 0;
-const START_POS = new THREE.Vector3(0, 0, 6);
+const START_POS = new THREE.Vector3(0, 0, 21);
 
 // ---------- Input ----------
 window.addEventListener('keydown', (e) => {
@@ -691,9 +728,7 @@ function damageEnemy(enemy, amount, knockDir, knockDist = 0.8) {
   camShake = Math.max(camShake, 0.28);
 
   if (knockDir) {
-    enemy.group.position.addScaledVector(knockDir, knockDist);
-    enemy.group.position.x = THREE.MathUtils.clamp(enemy.group.position.x, -BOUND, BOUND);
-    enemy.group.position.z = THREE.MathUtils.clamp(enemy.group.position.z, -BOUND, BOUND);
+    moveOnTerrain(enemy.group, knockDir.x * knockDist, knockDir.z * knockDist, BOUND);
   }
 
   if (enemy.hp <= 0 && enemy.alive) {
@@ -808,14 +843,13 @@ function animate() {
     currentAction = null;
   }
 
-  // ----- 구르기 -----
+  // ----- 구르기 (지형 충돌을 위해 프레임마다 조금씩 이동) -----
   if (rollT >= 0) {
+    const prev = easeOut(Math.min(rollT, 1));
     rollT += dt / ROLL_DURATION;
-    const p = Math.min(rollT, 1);
-    player.position.copy(rollStart).addScaledVector(rollDir, ROLL_DISTANCE * easeOut(p));
-    player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
-    player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
-    if (!mixer && playerRig) characterHolder.rotation.x = Math.PI * 2 * easeOut(p);
+    const step = (easeOut(Math.min(rollT, 1)) - prev) * ROLL_DISTANCE;
+    moveOnTerrain(player, rollDir.x * step, rollDir.z * step, BOUND);
+    if (!mixer && playerRig) characterHolder.rotation.x = Math.PI * 2 * easeOut(Math.min(rollT, 1));
     if (rollT >= 1) {
       rollT = -1;
       characterHolder.rotation.x = 0;
@@ -824,11 +858,10 @@ function animate() {
 
   // ----- 돌진 -----
   if (chargeT >= 0) {
+    const prev = easeOut(Math.min(chargeT, 1));
     chargeT += dt / CHARGE_DURATION;
-    const p = Math.min(chargeT, 1);
-    player.position.copy(chargeStart).addScaledVector(chargeDir, CHARGE_DISTANCE * easeOut(p));
-    player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
-    player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
+    const step = (easeOut(Math.min(chargeT, 1)) - prev) * CHARGE_DISTANCE;
+    moveOnTerrain(player, chargeDir.x * step, chargeDir.z * step, BOUND);
 
     // 지나가면서 부딪히는 적에게 데미지 (적당 1회)
     enemies.forEach((enemy, idx) => {
@@ -848,9 +881,8 @@ function animate() {
   const moveScale = MOVE_SCALE[state] ?? 1;
   if (isMoving && moveScale > 0) {
     lastFacing.copy(moveDir);
-    player.position.addScaledVector(moveDir, SPEED * moveScale * dt);
-    player.position.x = THREE.MathUtils.clamp(player.position.x, -BOUND, BOUND);
-    player.position.z = THREE.MathUtils.clamp(player.position.z, -BOUND, BOUND);
+    const d = SPEED * moveScale * dt;
+    moveOnTerrain(player, moveDir.x * d, moveDir.z * d, BOUND);
     // 방어 중에는 시선을 고정 (게걸음 + 4방향 구르기가 가능해짐)
     if (state !== 'block') {
       const target = Math.atan2(moveDir.x, moveDir.z);
@@ -858,6 +890,10 @@ function animate() {
       player.rotation.y = lerpAngle(player.rotation.y, target, 1 - Math.exp(-turnRate * dt));
     }
   }
+
+  // ----- 지형 높이 따라가기 (계단·월대) -----
+  const groundY = terrainHeight(player.position.x, player.position.z);
+  player.position.y += (groundY - player.position.y) * (1 - Math.exp(-18 * dt));
 
   // ----- 공격 판정 타이밍 -----
   if (pendingHit >= 0) {
@@ -955,6 +991,11 @@ function animate() {
       });
     }
     if (enemy.stagger > 0) enemy.stagger -= dt;
+
+    // 지형 높이 따라가기
+    const eY = terrainHeight(g.position.x, g.position.z);
+    g.position.y += (eY - g.position.y) * (1 - Math.exp(-14 * dt));
+
     if (enemy.busy >= 0) {
       enemy.busy -= dt;
       if (enemy.busy < 0) enemy.current = null;
@@ -971,7 +1012,8 @@ function animate() {
       g.rotation.y = lerpAngle(g.rotation.y, targetRot, 1 - Math.exp(-8 * dt));
 
       if (dist > ENEMY_ATTACK_RANGE && enemy.stagger <= 0 && !busy) {
-        g.position.addScaledVector(toPlayer, ENEMY_SPEED * dt);
+        const s = ENEMY_SPEED * dt;
+        moveOnTerrain(g, toPlayer.x * s, toPlayer.z * s, BOUND);
         if (enemy.mixer) enemyPlay(enemy, ANIM.run);
         else {
           enemy.walkPhase += dt * 9;
@@ -1010,8 +1052,8 @@ function animate() {
   items.forEach((item) => {
     if (item.collected) return;
     item.mesh.rotation.y += dt * 1.6;
-    item.mesh.position.y = 0.6 + Math.sin(clock.elapsedTime * 3) * 0.08;
-    if (player.position.distanceTo(item.mesh.position) < 1.2) {
+    item.mesh.position.y = item.baseY + Math.sin(clock.elapsedTime * 3) * 0.1;
+    if (player.position.distanceTo(item.mesh.position) < 1.4) {
       item.collected = true;
       scene.remove(item.mesh);
       if (item.effect === 'hp') setHp(hp + 40);
@@ -1020,8 +1062,24 @@ function animate() {
     }
   });
 
+  // ----- 지붕이 시야를 가리면 투명하게 -----
+  if (palace) {
+    const px = player.position.x;
+    const pz = player.position.z;
+    const hidden =
+      px > HALL_RECT.x0 && px < HALL_RECT.x1 &&
+      pz < HALL_RECT.z1 && pz + CAMERA_OFFSET.z > HALL_RECT.z0;
+    const targetOpacity = hidden ? 0.18 : 1;
+    const woodTarget = hidden ? 0.55 : 1;
+    roofMat.opacity += (targetOpacity - roofMat.opacity) * (1 - Math.exp(-8 * dt));
+    woodMat.opacity += (woodTarget - woodMat.opacity) * (1 - Math.exp(-8 * dt));
+    roofMat.transparent = roofMat.opacity < 0.99;
+    woodMat.transparent = woodMat.opacity < 0.99;
+    roofMat.depthWrite = roofMat.opacity > 0.9;
+  }
+
   // ----- 조명 / 카메라 -----
-  torchLight.position.set(player.position.x, 3, player.position.z);
+  torchLight.position.set(player.position.x, player.position.y + 3, player.position.z);
 
   camTarget.copy(player.position).add(CAMERA_OFFSET);
   camera.position.lerp(camTarget, 1 - Math.exp(-9 * dt));
@@ -1037,5 +1095,17 @@ function animate() {
 
   renderer.render(scene, camera);
 }
+
+// (임시 디버그 훅 — 확인 후 제거)
+window.__debug = {
+  player, keys, camera, characterHolder, enemies, scene,
+  get palace() { return palace; },
+  get state() { return state; },
+  get current() { return currentAction ? currentAction.getClip().name : null; },
+  terrainHeight,
+  canStand,
+  setBlock(v) { blockHeld = v; },
+  tick: animate,
+};
 
 animate();
