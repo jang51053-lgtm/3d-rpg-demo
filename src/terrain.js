@@ -76,9 +76,19 @@ export function terrainBlocked(wx, wz) {
   return (map.blocked[idx >> 3] >> (7 - (idx & 7))) & 1 ? true : false;
 }
 
-// 이동 규칙
-export const STEP_UP = 0.9;    // 이보다 높으면 못 올라감 (월대 옆면 차단, 계단은 통과)
-export const STEP_DOWN = 1.4;  // 이보다 낮으면 못 내려감 (월대에서 떨어지지 않음)
+/** 충돌 판정용 — 보간 없이 칸 값을 그대로 (보간하면 절벽을 반 칸씩 타고 내려감) */
+export function terrainHeightNearest(wx, wz) {
+  if (!map) return 0;
+  const mx = wx / MAP_SCALE;
+  const my = -wz / MAP_SCALE;
+  const j = Math.floor((mx - map.minXY) / map.cell);
+  const i = Math.floor((my - map.minXY) / map.cell);
+  return cellHeight(i, j);
+}
+
+// 이동 규칙 (계단 한 칸 ≈ 1.2, 월대 옆면 ≈ 2.6 이상)
+export const STEP_UP = 1.35;   // 계단은 오르고 월대 옆면은 못 오름
+export const STEP_DOWN = 1.6;  // 월대에서 뛰어내리지 못함
 const RADIUS = 0.36;           // 캐릭터 반경
 
 /** 그 자리에 설 수 있는지 (반경 안쪽 네 점까지 확인) */
@@ -92,7 +102,7 @@ export function canStand(fromY, wx, wz) {
   ) {
     return false;
   }
-  const h = terrainHeight(wx, wz);
+  const h = terrainHeightNearest(wx, wz);
   if (h - fromY > STEP_UP) return false;
   if (fromY - h > STEP_DOWN) return false;
   return true;
@@ -105,7 +115,7 @@ export function canStand(fromY, wx, wz) {
 export function moveOnTerrain(obj, dx, dz, bound) {
   const x = obj.position.x;
   const z = obj.position.z;
-  const y = terrainHeight(x, z);
+  const y = terrainHeightNearest(x, z);
   const cl = (v) => THREE.MathUtils.clamp(v, -bound, bound);
 
   const nx = cl(x + dx);

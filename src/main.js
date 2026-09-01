@@ -1069,8 +1069,8 @@ function animate() {
     const hidden =
       px > HALL_RECT.x0 && px < HALL_RECT.x1 &&
       pz < HALL_RECT.z1 && pz + CAMERA_OFFSET.z > HALL_RECT.z0;
-    const targetOpacity = hidden ? 0.18 : 1;
-    const woodTarget = hidden ? 0.55 : 1;
+    const targetOpacity = hidden ? 0.32 : 1;
+    const woodTarget = hidden ? 0.8 : 1;
     roofMat.opacity += (targetOpacity - roofMat.opacity) * (1 - Math.exp(-8 * dt));
     woodMat.opacity += (woodTarget - woodMat.opacity) * (1 - Math.exp(-8 * dt));
     roofMat.transparent = roofMat.opacity < 0.99;
