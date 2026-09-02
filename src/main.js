@@ -26,7 +26,7 @@ const CHARACTER_HEIGHT = 1.8;
 
 const ANIM = {
   idle: 'Idle',
-  run: 'Running_A',
+  run: 'Running_A', walk: 'Walking_A',
   attack: '1H_Melee_Attack_Slice_Diagonal',
   attackAlt: '1H_Melee_Attack_Chop',
   charge: '1H_Melee_Attack_Stab',
@@ -907,7 +907,7 @@ function animate() {
   // ----- 캐릭터 애니메이션 -----
   if (mixer) {
     if (state === 'locomotion') {
-      playClip(isMoving ? ANIM.run : ANIM.idle);
+      playClip(isMoving ? ANIM.walk : ANIM.idle);
     } else if (state === 'block') {
       playClip(ANIM.block, { fade: 0.12 });
     }
