@@ -29,7 +29,7 @@ const ANIM = {
   run: 'Running_A', walk: 'Walking_A',
   attack: '1H_Melee_Attack_Slice_Diagonal',
   attackAlt: '1H_Melee_Attack_Chop',
-  charge: '1H_Melee_Attack_Stab',
+  charge: '1H_Melee_Attack_Stab', spin: '1H_Melee_Attack_Slice_Diagonal',
   dodgeF: 'Dodge_Forward',
   dodgeB: 'Dodge_Backward',
   dodgeL: 'Dodge_Left',
