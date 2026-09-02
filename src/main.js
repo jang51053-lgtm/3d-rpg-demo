@@ -251,7 +251,7 @@ const MOVE_SCALE = {
   attack: 0.18,
   hit: 0.3,
   roll: 0,
-  charge: 0,
+  charge: 0, spin: 0,
   dead: 0,
 };
 
@@ -365,7 +365,7 @@ const guardMat = new THREE.MeshBasicMaterial({
 const guardFx = new THREE.Mesh(guardGeo, guardMat);
 guardFx.position.y = 1.0;
 guardFx.visible = false;
-player.add(guardFx);
+player.add(guardFx); const spinFxGeo = new THREE.RingGeometry(0.6, 3.6, 40); spinFxGeo.rotateX(-Math.PI / 2); const spinFxMat = new THREE.MeshBasicMaterial({ color: 0xfff2cc, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }); const spinFx = new THREE.Mesh(spinFxGeo, spinFxMat); spinFx.position.y = 0.15; spinFx.visible = false; player.add(spinFx); let spinFxT = -1;
 
 // ---------- Enemies ----------
 const enemies = [];
@@ -547,21 +547,21 @@ const CHARGE_DISTANCE = 7.5;
 const CHARGE_COST = 30;
 const CHARGE_COOLDOWN = 1.8;
 const CHARGE_DAMAGE = 20;
-const CHARGE_HIT_RADIUS = 1.7;
+const CHARGE_HIT_RADIUS = 1.7; const SPIN_COOLDOWN = 3.4; const SPIN_COST = 40; const SPIN_RADIUS = 3.4; const SPIN_DAMAGE = 24; const SPIN_DURATION = 0.85; let spinCooldownLeft = 0; function trySpin() { if (!canAct() || spinCooldownLeft > 0 || mp < SPIN_COST) return; setMp(mp - SPIN_COST); spinCooldownLeft = SPIN_COOLDOWN; setState('spin', SPIN_DURATION); playClip(ANIM.spin, { once: true, fade: 0.05, fitDuration: SPIN_DURATION }); camShake = Math.max(camShake, 0.32); hitStopTimer = Math.max(hitStopTimer, 0.06); spinFx.visible = true; spinFxMat.opacity = 0.85; spinFx.scale.setScalar(0.3); spinFxT = 0; let hitAny = false; enemies.forEach((enemy) => { if (!enemy.alive) return; const d = enemy.group.position.clone().sub(player.position); d.y = 0; if (d.length() <= SPIN_RADIUS) { damageEnemy(enemy, SPIN_DAMAGE, d.normalize(), 1.8, 0.42); spawnSpark(enemy.group.position, 0xfff2cc, 5); hitAny = true; } }); if (hitAny) showToast('회전베기!'); }
 let chargeT = -1;
 let chargeCooldownLeft = 0;
 const chargeDir = new THREE.Vector3();
 const chargeStart = new THREE.Vector3();
 let chargeHitSet = new Set();
-const chargeCooldownEl = document.getElementById('charge-cooldown');
+const chargeCooldownEl = document.getElementById('charge-cooldown'); const spinCooldownEl = document.getElementById('spin-cooldown');
 
 // 공격
-const ATTACK_COOLDOWN = 0.6;
+const ATTACK_COOLDOWN = 0.38;
 const ATTACK_DURATION = 0.55;
-const ATTACK_HIT_DELAY = 0.22;
-const ATTACK_RANGE = 2.8;
-const ATTACK_DAMAGE = 14;
-let attackCooldownLeft = 0;
+let ATTACK_HIT_DELAY = 0.22;
+let ATTACK_RANGE = 2.8;
+let ATTACK_DAMAGE = 14;
+let attackCooldownLeft = 0; let comboIndex = 0; let comboResetTimer = 0; const COMBO_WINDOW = 0.9; let ATTACK_KNOCK = 0.8; let ATTACK_SHAKE = 0.28; let ATTACK_CLIP_KEY = 'attack'; let ATTACK_SLASH_SCALE = 1; const COMBO_TIERS = [{ clip: 'attackAlt', dmg: 10, range: 2.6, knock: 0.6, fit: 0.32, shake: 0.24, scale: 0.85 }, { clip: 'attackHoriz', dmg: 13, range: 2.8, knock: 0.95, fit: 0.4, shake: 0.3, scale: 1.05 }, { clip: 'attack', dmg: 19, range: 3.0, knock: 1.5, fit: 0.52, shake: 0.46, scale: 1.4 }];
 let pendingHit = -1;
 let slashT = -1;
 const attackCooldownEl = document.getElementById('attack-cooldown');
@@ -582,7 +582,7 @@ const ENEMY_ATTACK_RANGE = 1.9;
 const ENEMY_DAMAGE = 9;
 const ENEMY_ATTACK_CD = 1.5;
 
-let camShake = 0;
+let camShake = 0; let hitStopTimer = 0; const sparks = []; const sparkGeo = new THREE.PlaneGeometry(0.18, 0.18); function spawnSpark(pos, color, count) { color = color || 0xfff2cc; count = count || 8; for (let i = 0; i < count; i++) { const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }); const m = new THREE.Mesh(sparkGeo, mat); m.position.copy(pos); m.position.y += 0.6 + Math.random() * 0.4; const ang = Math.random() * Math.PI * 2; const spd = 2.5 + Math.random() * 3.5; scene.add(m); sparks.push({ mesh: m, mat: mat, vx: Math.cos(ang) * spd, vz: Math.sin(ang) * spd, vy: 2 + Math.random() * 2, life: 0.35 + Math.random() * 0.15, t: 0 }); } }
 const START_POS = new THREE.Vector3(0, 0, 21);
 
 // ---------- Input ----------
@@ -592,7 +592,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (!e.repeat) tryRoll();
   }
-  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) tryCharge();
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && !e.repeat) tryCharge(); if (e.code === 'KeyR' && !e.repeat) trySpin();
   if (e.code === 'KeyQ' && !e.repeat) blockHeld = true;
   if (e.code === 'KeyX' && !e.repeat) tryAttack();
 });
@@ -637,6 +637,7 @@ function bindButton(id, onDown, onUp) {
 bindButton('skill-attack', () => tryAttack());
 bindButton('skill-roll', () => tryRoll());
 bindButton('skill-charge', () => tryCharge());
+bindButton('skill-spin', () => trySpin());
 bindButton('skill-block', () => { blockHeld = true; }, () => { blockHeld = false; });
 
 // ---------- 액션 ----------
@@ -693,17 +694,17 @@ function tryCharge() {
 
 function tryAttack() {
   if (state !== 'locomotion' || attackCooldownLeft > 0) return;
-  attackCooldownLeft = ATTACK_COOLDOWN;
+  attackCooldownLeft = ATTACK_COOLDOWN; const tier = COMBO_TIERS[comboIndex]; ATTACK_DURATION = tier.fit; ATTACK_RANGE = tier.range; ATTACK_DAMAGE = tier.dmg; ATTACK_KNOCK = tier.knock; ATTACK_SHAKE = tier.shake; ATTACK_CLIP_KEY = tier.clip; ATTACK_SLASH_SCALE = tier.scale; ATTACK_HIT_DELAY = tier.fit * 0.42; comboIndex = (comboIndex + 1) % COMBO_TIERS.length; comboResetTimer = COMBO_WINDOW;
   pendingHit = ATTACK_HIT_DELAY;
   setState('attack', ATTACK_DURATION);
-  playClip(ANIM.attack, { once: true, fade: 0.06, fitDuration: ATTACK_DURATION });
+  playClip(ANIM[ATTACK_CLIP_KEY], { once: true, fade: 0.06, fitDuration: ATTACK_DURATION });
 }
 
 function resolveAttackHit() {
   slashT = 0;
   slash.visible = true;
   slashMat.opacity = 0.9;
-  slash.scale.setScalar(0.8);
+  slash.scale.setScalar(0.8 * ATTACK_SLASH_SCALE);
 
   const facing = new THREE.Vector3(Math.sin(player.rotation.y), 0, Math.cos(player.rotation.y));
   let hitAny = false;
@@ -715,17 +716,17 @@ function resolveAttackHit() {
     if (dist > ATTACK_RANGE) return;
     toEnemy.normalize();
     if (facing.dot(toEnemy) < 0.25) return;
-    damageEnemy(enemy, ATTACK_DAMAGE, toEnemy, 0.8);
+    damageEnemy(enemy, ATTACK_DAMAGE, toEnemy, ATTACK_KNOCK, ATTACK_SHAKE); spawnSpark(enemy.group.position, 0xffe08a, 6 + Math.round(ATTACK_SLASH_SCALE * 3));
     hitAny = true;
   });
   if (!hitAny) camShake = Math.max(camShake, 0.05);
 }
 
-function damageEnemy(enemy, amount, knockDir, knockDist = 0.8) {
+function damageEnemy(enemy, amount, knockDir, knockDist = 0.8, shakeAmt = 0.28) {
   enemy.hp -= amount;
   enemy.hitFlash = 0.12;
   enemy.stagger = 0.3;
-  camShake = Math.max(camShake, 0.28);
+  camShake = Math.max(camShake, shakeAmt); hitStopTimer = Math.max(hitStopTimer, shakeAmt * 0.18);
 
   if (knockDir) {
     moveOnTerrain(enemy.group, knockDir.x * knockDist, knockDir.z * knockDist, BOUND);
@@ -762,11 +763,11 @@ function damagePlayer(amount, fromPos) {
     guardFx.visible = true;
     guardMat.opacity = 0.9;
     guardFx.scale.setScalar(0.8);
-    camShake = Math.max(camShake, 0.12);
+    camShake = Math.max(camShake, 0.12); hitStopTimer = Math.max(hitStopTimer, 0.05);
   } else {
     setHp(hp - amount);
     flashDamage();
-    camShake = Math.max(camShake, 0.35);
+    camShake = Math.max(camShake, 0.35); hitStopTimer = Math.max(hitStopTimer, 0.08); spawnSpark(player.position, 0xff5555, 7);
     if (hp > 0 && state === 'locomotion') {
       setState('hit', 0.35);
       playClip(ANIM.hit, { once: true, fade: 0.05, fitDuration: 0.35 });
@@ -812,7 +813,7 @@ let walkPhase = 0;
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.05);
+  const rawDt = Math.min(clock.getDelta(), 0.05); if (hitStopTimer > 0) hitStopTimer -= rawDt; const dt = hitStopTimer > 0 ? rawDt * 0.05 : rawDt;
 
   // ----- 입력 -----
   moveDir.set(0, 0, 0);
@@ -953,9 +954,9 @@ function animate() {
   }
 
   // ----- 쿨다운 / 마나 -----
-  if (rollCooldownLeft > 0) rollCooldownLeft = Math.max(0, rollCooldownLeft - dt);
+  if (rollCooldownLeft > 0) rollCooldownLeft = Math.max(0, rollCooldownLeft - dt); if (spinCooldownLeft > 0) spinCooldownLeft = Math.max(0, spinCooldownLeft - dt); spinCooldownEl.style.height = (spinCooldownLeft / SPIN_COOLDOWN * 100) + '%'; if (spinFxT >= 0) { spinFxT += dt / 0.5; const sp = Math.min(spinFxT, 1); spinFxMat.opacity = 0.85 * (1 - sp); spinFx.scale.setScalar(0.3 + sp * 1.4); if (spinFxT >= 1) { spinFxT = -1; spinFx.visible = false; } } for (let i = sparks.length - 1; i >= 0; i--) { const s = sparks[i]; s.t += dt; const sp2 = s.t / s.life; if (sp2 >= 1) { scene.remove(s.mesh); s.mat.dispose(); sparks.splice(i, 1); continue; } s.mesh.position.x += s.vx * dt; s.mesh.position.z += s.vz * dt; s.vy -= dt * 9; s.mesh.position.y += s.vy * dt; s.mat.opacity = 1 - sp2; s.mesh.scale.setScalar(1 - sp2 * 0.5); }
   if (chargeCooldownLeft > 0) chargeCooldownLeft = Math.max(0, chargeCooldownLeft - dt);
-  if (attackCooldownLeft > 0) attackCooldownLeft = Math.max(0, attackCooldownLeft - dt);
+  if (attackCooldownLeft > 0) attackCooldownLeft = Math.max(0, attackCooldownLeft - dt); if (comboResetTimer > 0) { comboResetTimer -= dt; if (comboResetTimer <= 0) comboIndex = 0; }
   if (state !== 'block') setMp(mp + MP_REGEN * dt); // 방어 중에는 마나 회복 정지
   rollCooldownEl.style.height = `${(rollCooldownLeft / ROLL_COOLDOWN) * 100}%`;
   chargeCooldownEl.style.height = `${(chargeCooldownLeft / CHARGE_COOLDOWN) * 100}%`;
