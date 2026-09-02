@@ -439,7 +439,7 @@ function spawnEnemies(useModel) {
       hitFlash: 0,
       stagger: 0,
       busy: -1, // 공격/피격 모션 진행 중
-      dieT: undefined,
+      dieT: undefined, telegraph: -1,
     });
   });
   updateEnemyCount();
@@ -580,7 +580,7 @@ const ENEMY_SPEED = 2.5;
 const ENEMY_SIGHT = 26;
 const ENEMY_ATTACK_RANGE = 1.9;
 const ENEMY_DAMAGE = 9;
-const ENEMY_ATTACK_CD = 1.5;
+const ENEMY_ATTACK_CD = 1.5; const ENEMY_TELEGRAPH_TIME = 0.55; const ENEMY_SEPARATION_RADIUS = 1.6; const ENEMY_SEPARATION_FORCE = 3.2;
 
 let camShake = 0; let hitStopTimer = 0; const sparks = []; const sparkGeo = new THREE.PlaneGeometry(0.18, 0.18); function spawnSpark(pos, color, count) { color = color || 0xfff2cc; count = count || 8; for (let i = 0; i < count; i++) { const mat = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }); const m = new THREE.Mesh(sparkGeo, mat); m.position.copy(pos); m.position.y += 0.6 + Math.random() * 0.4; const ang = Math.random() * Math.PI * 2; const spd = 2.5 + Math.random() * 3.5; scene.add(m); sparks.push({ mesh: m, mat: mat, vx: Math.cos(ang) * spd, vz: Math.sin(ang) * spd, vy: 2 + Math.random() * 2, life: 0.35 + Math.random() * 0.15, t: 0 }); } }
 const START_POS = new THREE.Vector3(0, 0, 21);
@@ -1012,9 +1012,9 @@ function animate() {
       const targetRot = Math.atan2(toPlayer.x, toPlayer.z);
       g.rotation.y = lerpAngle(g.rotation.y, targetRot, 1 - Math.exp(-8 * dt));
 
-      if (dist > ENEMY_ATTACK_RANGE && enemy.stagger <= 0 && !busy) {
-        const s = ENEMY_SPEED * dt;
-        moveOnTerrain(g, toPlayer.x * s, toPlayer.z * s, BOUND);
+      if (dist > ENEMY_ATTACK_RANGE && enemy.stagger <= 0 && enemy.telegraph < 0 && !busy) {
+        const s = ENEMY_SPEED * dt; let sepX = 0, sepZ = 0; enemies.forEach((other) => { if (other === enemy || !other.alive) return; const dx = g.position.x - other.group.position.x; const dz = g.position.z - other.group.position.z; const d2 = dx * dx + dz * dz; if (d2 > 0.0001 && d2 < ENEMY_SEPARATION_RADIUS * ENEMY_SEPARATION_RADIUS) { const d = Math.sqrt(d2); const push = (1 - d / ENEMY_SEPARATION_RADIUS) * ENEMY_SEPARATION_FORCE; sepX += (dx / d) * push; sepZ += (dz / d) * push; } });
+        moveOnTerrain(g, (toPlayer.x + sepX) * s, (toPlayer.z + sepZ) * s, BOUND);
         if (enemy.mixer) enemyPlay(enemy, ANIM.run);
         else {
           enemy.walkPhase += dt * 9;
@@ -1029,16 +1029,11 @@ function animate() {
           }
         }
         enemy.attackCd -= dt;
-        if (dist <= ENEMY_ATTACK_RANGE && enemy.attackCd <= 0 && !busy) {
+      if (enemy.telegraph > 0) { enemy.telegraph -= dt; enemy.materials.forEach((m) => { if (m.emissive) m.emissive.setHex(0xffaa00); }); if (enemy.telegraph <= 0) { enemy.telegraph = -1; if (enemy.mixer) enemyPlay(enemy, ANIM.attackAlt, { once: true, fade: 0.08, fitDuration: 0.4 }); else { enemy.walkPhase = 0; animateLimbs(enemy.rig, Math.PI / 2, 1.6); } if (g.position.distanceTo(player.position) <= ENEMY_ATTACK_RANGE + 0.5) damagePlayer(ENEMY_DAMAGE, g.position); } }
+        if (dist <= ENEMY_ATTACK_RANGE && enemy.attackCd <= 0 && enemy.telegraph < 0 && !busy) {
           enemy.attackCd = ENEMY_ATTACK_CD;
-          enemy.busy = 0.7;
-          if (enemy.mixer) enemyPlay(enemy, ANIM.attackAlt, { once: true, fade: 0.08, fitDuration: 0.7 });
-          else {
-            enemy.walkPhase = 0;
-            animateLimbs(enemy.rig, Math.PI / 2, 1.6);
+          enemy.telegraph = ENEMY_TELEGRAPH_TIME; enemy.busy = ENEMY_TELEGRAPH_TIME + 0.15;
           }
-          damagePlayer(ENEMY_DAMAGE, g.position);
-        }
       }
     } else if (!busy) {
       if (enemy.mixer) enemyPlay(enemy, ANIM.idle);
