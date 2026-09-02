@@ -557,7 +557,7 @@ const chargeCooldownEl = document.getElementById('charge-cooldown'); const spinC
 
 // 공격
 const ATTACK_COOLDOWN = 0.38;
-const ATTACK_DURATION = 0.55;
+let ATTACK_DURATION = 0.55;
 let ATTACK_HIT_DELAY = 0.22;
 let ATTACK_RANGE = 2.8;
 let ATTACK_DAMAGE = 14;
